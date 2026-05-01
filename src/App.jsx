@@ -220,21 +220,59 @@ function App() {
         </div>
       </div>
       
-      <div className="editor-container">
-        {activeNote ? (
-          <textarea
-            className="textarea"
-            value={activeNote.content}
-            onChange={updateContent}
-            placeholder="Type your notes here... (Saves automatically)"
-            autoFocus
-          />
-        ) : (
-          <div style={{ padding: 24, color: 'var(--text-muted)' }}>
-            No tabs open. Click + to create a new note.
-            {!user && <p style={{ marginTop: 8 }}>Sign in to access your cloud-synced notes across all your devices.</p>}
+      <div className="editor-container" style={{ flexDirection: 'row' }}>
+        {/* Sidebar for all notes */}
+        <div style={{ width: '200px', borderRight: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+            ALL NOTES
           </div>
-        )}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+            {notes.map(note => (
+              <div 
+                key={note.id}
+                onClick={() => {
+                  if (!openTabs.includes(note.id)) {
+                    saveAppState(note.id, [...openTabs, note.id]);
+                  } else {
+                    saveAppState(note.id, openTabs);
+                  }
+                }}
+                style={{
+                  padding: '8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  backgroundColor: activeTabId === note.id ? 'var(--tab-active-bg)' : 'transparent',
+                  marginBottom: '4px',
+                  fontSize: '13px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {note.title}
+              </div>
+            ))}
+            {notes.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No notes found.</div>}
+          </div>
+        </div>
+
+        {/* Main Editor */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {activeNote ? (
+            <textarea
+              className="textarea"
+              value={activeNote.content}
+              onChange={updateContent}
+              placeholder="Type your notes here... (Saves automatically)"
+              autoFocus
+            />
+          ) : (
+            <div style={{ padding: 24, color: 'var(--text-muted)' }}>
+              No tabs open. Click + to create a new note or select one from the sidebar.
+              {!user && <p style={{ marginTop: 8 }}>Sign in to access your cloud-synced notes across all your devices.</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="statusbar">
