@@ -181,6 +181,16 @@ function App() {
 
   const activeNote = notes.find(n => n.id === activeTabId);
 
+  useEffect(() => {
+    const handleGlobalClick = () => setContextMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    window.addEventListener('contextmenu', handleGlobalClick); // Also close on right click elsewhere
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('contextmenu', handleGlobalClick);
+    };
+  }, []);
+
   const deleteNote = async (noteId) => {
     if (window.confirm('Are you sure you want to delete this note?')) {
       await db.notes.delete(noteId);
@@ -215,6 +225,7 @@ function App() {
 
   const handleContextMenu = (e, noteId) => {
     e.preventDefault();
+    e.stopPropagation();
     setContextMenu({ x: e.pageX, y: e.pageY, noteId });
   };
 
