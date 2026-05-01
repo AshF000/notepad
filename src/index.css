@@ -308,8 +308,28 @@ body {
   }
 }
 
+/* Sidebar Delete Button */
+.sidebar-delete-btn {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar-item:hover .sidebar-delete-btn {
+  opacity: 1;
+}
+
+.sidebar-delete-btn:hover {
+  background-color: rgba(255, 0, 0, 0.2) !important;
+  color: #ff6b6b !important;
+}
+
 /* Context Menu */
-.context-menu-item {
+.context-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -317,15 +337,19 @@ body {
   background: transparent;
   border: none;
   color: var(--text-color);
-  font-family: inherit;
-  font-size: 13px;
-  text-align: left;
   width: 100%;
+  text-align: left;
   cursor: pointer;
   border-radius: 4px;
-  transition: background-color 0.15s ease;
+  font-size: 13px;
 }
 
-.context-menu-item:hover {
+.menu-item:hover {
   background-color: var(--tab-hover-bg);
 }
+
+.menu-item.delete:hover {
+  background-color: rgba(255, 0, 0, 0.2);
+  color: #ff6b6b;
+}
+

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, X, FileText, LogIn, LogOut, Cloud, Menu, MoreVertical, Edit2, Trash2 } from 'lucide-react';
+import { Plus, X, FileText, LogIn, LogOut, Cloud, Menu, MoreVertical, Trash2, Edit3 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from './db';
 import { auth, googleProvider, firestoreDb } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot, setDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, doc, query, where, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import './index.css';
 
 function App() {
@@ -14,22 +14,15 @@ function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-
-  // Context Menu State
-  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, noteId: null });
-  const [editingNoteId, setEditingNoteId] = useState(null);
-  const [editingTitle, setEditingTitle] = useState("");
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, noteId }
+  const longPressTimer = useRef(null);
 
   const currentUserId = user ? user.uid : 'local';
 
-  // Fetch all notes (including pending deletes so worker can process them)
-  const allNotes = useLiveQuery(
+  const notes = useLiveQuery(
     () => db.notes.where('userId').equals(currentUserId).toArray(),
     [currentUserId]
   ) || [];
-
-  // Filter out soft-deleted notes from the UI
-  const notes = allNotes.filter(n => n.syncStatus !== 'deleted');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -77,6 +70,7 @@ function App() {
               syncStatus: 'synced'
             });
 
+            // Auto-open tab for newly synced notes (PC behavior)
             if (!localNote) {
               const state = await db.appState.get('main');
               if (state && !state.openTabs.includes(change.doc.id)) {
@@ -87,15 +81,6 @@ function App() {
         }
         if (change.type === 'removed') {
           await db.notes.delete(change.doc.id);
-          // Also remove from open tabs if open
-          setOpenTabs(prev => {
-            if (prev.includes(change.doc.id)) {
-               const newTabs = prev.filter(id => id !== change.doc.id);
-               saveAppState(null, newTabs); // simplistic active tab fallback
-               return newTabs;
-            }
-            return prev;
-          });
         }
       });
     }, (error) => {
@@ -105,12 +90,10 @@ function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // Sync Worker
   useEffect(() => {
     if (!user) return;
     
     const syncInterval = setInterval(async () => {
-      // 1. Sync pending updates/creates
       const pendingNotes = await db.notes
         .where('userId').equals(user.uid)
         .and(n => n.syncStatus === 'pending')
@@ -132,25 +115,6 @@ function App() {
         }
         setIsSyncing(false);
       }
-
-      // 2. Sync pending deletes
-      const pendingDeletes = await db.notes
-        .where('userId').equals(user.uid)
-        .and(n => n.syncStatus === 'deleted')
-        .toArray();
-      
-      if (pendingDeletes.length > 0) {
-        setIsSyncing(true);
-        for (let note of pendingDeletes) {
-          try {
-            await deleteDoc(doc(firestoreDb, 'notes', note.id));
-            await db.notes.delete(note.id);
-          } catch (error) {
-            console.error("Failed to delete remote note:", note.id, error);
-          }
-        }
-        setIsSyncing(false);
-      }
     }, 5000);
 
     return () => clearInterval(syncInterval);
@@ -168,11 +132,11 @@ function App() {
     });
     const newTabs = [...openTabs, newId];
     await saveAppState(newId, newTabs);
-    setIsMobileSidebarOpen(false);
+    setIsMobileSidebarOpen(false); // Close sidebar on mobile when creating new
   };
 
   const closeTab = async (e, idToClose) => {
-    if (e) e.stopPropagation();
+    e.stopPropagation();
     const newTabs = openTabs.filter(id => id !== idToClose);
     
     let newActiveId = activeTabId;
@@ -200,80 +164,6 @@ function App() {
     });
   };
 
-  // Delete Note Logic
-  const handleDeleteNote = async (idToDelete) => {
-    // Remove from UI open tabs first
-    if (openTabs.includes(idToDelete)) {
-      await closeTab(null, idToDelete);
-    }
-
-    if (user) {
-      // Soft delete for syncing
-      await db.notes.update(idToDelete, { syncStatus: 'deleted' });
-    } else {
-      // Hard delete if offline/local-only
-      await db.notes.delete(idToDelete);
-    }
-    setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
-  };
-
-  // Rename Note Logic
-  const handleRenameSubmit = async (e) => {
-    if (e.key === 'Enter') {
-      const newTitle = editingTitle.trim() || "Untitled";
-      const note = await db.notes.get(editingNoteId);
-      
-      // Update the first line of content to match the new title, keeping the rest
-      const lines = note.content.split('\n');
-      lines[0] = newTitle;
-      const newContent = lines.join('\n');
-
-      await db.notes.update(editingNoteId, {
-        title: newTitle,
-        content: newContent,
-        lastModified: Date.now(),
-        syncStatus: 'pending'
-      });
-      setEditingNoteId(null);
-    }
-  };
-
-  // Context Menu and Long Press Handlers
-  const touchTimer = useRef(null);
-
-  const handleContextMenu = (e, noteId) => {
-    e.preventDefault();
-    setContextMenu({
-      visible: true,
-      x: e.clientX,
-      y: e.clientY,
-      noteId
-    });
-  };
-
-  const handleTouchStart = (e, noteId) => {
-    const touch = e.touches[0];
-    touchTimer.current = setTimeout(() => {
-      setContextMenu({
-        visible: true,
-        x: touch.clientX,
-        y: touch.clientY,
-        noteId
-      });
-    }, 500); // 500ms long press
-  };
-
-  const handleTouchEnd = () => {
-    if (touchTimer.current) clearTimeout(touchTimer.current);
-  };
-
-  // Close context menu on any outside click
-  useEffect(() => {
-    const handleClick = () => setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, []);
-
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
@@ -291,8 +181,57 @@ function App() {
 
   const activeNote = notes.find(n => n.id === activeTabId);
 
+  const deleteNote = async (noteId) => {
+    if (window.confirm('Are you sure you want to delete this note?')) {
+      await db.notes.delete(noteId);
+      // Remove from open tabs
+      const newTabs = openTabs.filter(id => id !== noteId);
+      let newActiveId = activeTabId === noteId ? (newTabs[0] || null) : activeTabId;
+      await saveAppState(newActiveId, newTabs);
+      
+      if (user) {
+        try {
+          await deleteDoc(doc(firestoreDb, 'notes', noteId));
+        } catch (error) {
+          console.error("Failed to delete from Firestore:", error);
+        }
+      }
+      setContextMenu(null);
+    }
+  };
+
+  const renameNote = async (noteId) => {
+    const note = await db.notes.get(noteId);
+    const newTitle = window.prompt('Rename note:', note.title);
+    if (newTitle !== null && newTitle.trim() !== '') {
+      await db.notes.update(noteId, { 
+        title: newTitle,
+        lastModified: Date.now(),
+        syncStatus: 'pending'
+      });
+    }
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e, noteId) => {
+    e.preventDefault();
+    setContextMenu({ x: e.pageX, y: e.pageY, noteId });
+  };
+
+  const handleTouchStart = (noteId) => {
+    longPressTimer.current = setTimeout(() => {
+      // Find coordinates from touch? Or just center?
+      setContextMenu({ x: window.innerWidth / 2 - 50, y: window.innerHeight / 2 - 50, noteId });
+    }, 600); // 600ms for long press
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
+
   return (
     <>
+      {/* Mobile-only Header */}
       <div className="mobile-header">
         <button className="icon-btn" onClick={() => setIsMobileSidebarOpen(true)}>
           <Menu size={20} />
@@ -305,6 +244,7 @@ function App() {
         </button>
       </div>
 
+      {/* PC Titlebar (Hidden on Mobile) */}
       <div className="titlebar desktop-only">
         {openTabs.map(tabId => {
           const note = notes.find(n => n.id === tabId);
@@ -334,9 +274,14 @@ function App() {
       
       <div className="editor-container" style={{ flexDirection: 'row' }}>
         
+        {/* Mobile Sidebar Overlay */}
         <div className={`sidebar-overlay ${isMobileSidebarOpen ? 'open' : ''}`} onClick={() => setIsMobileSidebarOpen(false)}></div>
         
-        <div className={`app-sidebar ${isMobileSidebarOpen ? 'open' : ''}`}>
+        {/* Sidebar */}
+        <div 
+          className={`app-sidebar ${isMobileSidebarOpen ? 'open' : ''}`}
+          onClick={() => setContextMenu(null)}
+        >
           <div style={{ padding: '16px', fontSize: '12px', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
             ALL NOTES
           </div>
@@ -344,20 +289,18 @@ function App() {
             {notes.map(note => (
               <div 
                 key={note.id}
-                onClick={() => {
-                  if (editingNoteId !== note.id) {
-                    if (!openTabs.includes(note.id)) {
-                      saveAppState(note.id, [...openTabs, note.id]);
-                    } else {
-                      saveAppState(note.id, openTabs);
-                    }
-                    setIsMobileSidebarOpen(false);
-                  }
-                }}
                 onContextMenu={(e) => handleContextMenu(e, note.id)}
-                onTouchStart={(e) => handleTouchStart(e, note.id)}
+                onTouchStart={() => handleTouchStart(note.id)}
                 onTouchEnd={handleTouchEnd}
-                onTouchMove={handleTouchEnd}
+                onClick={() => {
+                  if (!openTabs.includes(note.id)) {
+                    saveAppState(note.id, [...openTabs, note.id]);
+                  } else {
+                    saveAppState(note.id, openTabs);
+                  }
+                  setIsMobileSidebarOpen(false);
+                }}
+                className="sidebar-item"
                 style={{
                   padding: '12px',
                   borderRadius: '6px',
@@ -365,30 +308,32 @@ function App() {
                   backgroundColor: activeTabId === note.id ? 'var(--tab-active-bg)' : 'transparent',
                   marginBottom: '4px',
                   fontSize: '14px',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
                   display: 'flex',
                   alignItems: 'center',
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none'
+                  justifyContent: 'space-between',
+                  position: 'relative'
                 }}
               >
-                <FileText size={14} color="#60cdff" style={{ marginRight: 8, flexShrink: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', flex: 1 }}>
+                  <FileText size={14} color="#60cdff" style={{ flexShrink: 0, marginRight: 8 }} />
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.title}</span>
+                </div>
                 
-                {editingNoteId === note.id ? (
-                  <input 
-                    autoFocus
-                    value={editingTitle}
-                    onChange={(e) => setEditingTitle(e.target.value)}
-                    onKeyDown={handleRenameSubmit}
-                    onBlur={() => setEditingNoteId(null)}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'white', outline: 'none', padding: '2px 4px', borderRadius: '4px', width: '100%' }}
-                  />
-                ) : (
-                  <span>{note.title}</span>
-                )}
+                {/* Delete button (visible on hover in PC or long press context) */}
+                <button 
+                  className="sidebar-delete-btn"
+                  onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    display: 'flex'
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             ))}
             {notes.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No notes found.</div>}
@@ -407,6 +352,40 @@ function App() {
           </div>
         </div>
 
+        {/* Context Menu */}
+        {contextMenu && (
+          <div 
+            className="context-menu"
+            style={{
+              position: 'fixed',
+              top: contextMenu.y,
+              left: contextMenu.x,
+              backgroundColor: '#2d2d2d',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+              zIndex: 2000,
+              padding: '4px',
+              minWidth: '120px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              className="menu-item" 
+              onClick={() => renameNote(contextMenu.noteId)}
+            >
+              <Edit3 size={14} /> Rename
+            </button>
+            <button 
+              className="menu-item delete" 
+              onClick={() => deleteNote(contextMenu.noteId)}
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>
+        )}
+
+        {/* Main Editor */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {activeNote ? (
             <textarea
@@ -418,7 +397,7 @@ function App() {
             />
           ) : (
             <div style={{ padding: 24, color: 'var(--text-muted)' }}>
-              No tabs open. Open the menu to select a note or create a new one.
+              {isMobileSidebarOpen ? '' : 'No tabs open. Open the menu to select a note or create a new one.'}
             </div>
           )}
         </div>
@@ -430,46 +409,6 @@ function App() {
           {!user ? 'Offline Mode (Local)' : (isSyncing ? 'Syncing...' : 'Synced via Firebase')}
         </span>
       </div>
-
-      {/* Custom Context Menu */}
-      {contextMenu.visible && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: contextMenu.y,
-            left: contextMenu.x,
-            backgroundColor: 'var(--tab-active-bg)',
-            border: '1px solid var(--border-color)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-            borderRadius: '8px',
-            padding: '4px',
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: '150px'
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button 
-            className="context-menu-item"
-            onClick={() => {
-              setEditingNoteId(contextMenu.noteId);
-              const note = notes.find(n => n.id === contextMenu.noteId);
-              if (note) setEditingTitle(note.title);
-              setContextMenu({ visible: false, x: 0, y: 0, noteId: null });
-            }}
-          >
-            <Edit2 size={14} /> Rename
-          </button>
-          <button 
-            className="context-menu-item"
-            onClick={() => handleDeleteNote(contextMenu.noteId)}
-            style={{ color: '#ff6b6b' }}
-          >
-            <Trash2 size={14} /> Delete
-          </button>
-        </div>
-      )}
     </>
   );
 }
