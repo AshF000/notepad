@@ -1,0 +1,192 @@
+:root {
+  --bg-color: #1e1e1e;
+  --bg-gradient: linear-gradient(135deg, #1e1e1e 0%, #121212 100%);
+  --tab-bg: rgba(30, 30, 30, 0.6);
+  --tab-active-bg: #1e1e1e;
+  --tab-hover-bg: rgba(60, 60, 60, 0.4);
+  --text-color: #f3f3f3;
+  --text-muted: #888888;
+  --border-color: #333333;
+  --accent-color: #60cdff;
+  --font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-gradient);
+  backdrop-filter: blur(20px);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tabs Bar */
+.titlebar {
+  display: flex;
+  align-items: flex-end;
+  background-color: var(--tab-bg);
+  height: 48px;
+  padding: 0 8px;
+  -webkit-app-region: drag; /* For Electron */
+  border-bottom: 1px solid var(--border-color);
+  gap: 4px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: transparent;
+  color: var(--text-color);
+  border: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  height: 36px;
+  min-width: 120px;
+  max-width: 200px;
+  position: relative;
+  transition: background-color 0.15s ease;
+}
+
+.tab:hover {
+  background-color: var(--tab-hover-bg);
+}
+
+.tab.active {
+  background-color: var(--tab-active-bg);
+  border: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--tab-active-bg);
+  z-index: 2;
+  margin-bottom: -1px;
+}
+
+.tab-title {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-color);
+}
+
+.new-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  margin-left: 4px;
+  margin-bottom: 2px;
+  transition: background-color 0.15s ease;
+}
+
+.new-tab-btn:hover {
+  background-color: var(--tab-hover-bg);
+}
+
+/* Editor Area */
+.editor-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-color);
+}
+
+.textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-color);
+  padding: 16px 24px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #4a4a4a;
+  border: 4px solid var(--bg-color);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #5a5a5a;
+}
+
+/* Status Bar */
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background-color: var(--bg-color);
+  border-top: 1px solid var(--border-color);
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
