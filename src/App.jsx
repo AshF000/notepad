@@ -220,29 +220,15 @@ function App() {
         <button className="new-tab-btn" onClick={createNewTab} title="New Tab">
           <Plus size={18} />
         </button>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', marginRight: '8px', paddingBottom: '4px' }}>
-          {user ? (
-            <button className="new-tab-btn" onClick={handleLogout} title="Logout" style={{ width: 'auto', padding: '0 12px', fontSize: '12px' }}>
-              <LogOut size={14} style={{ marginRight: '6px' }} />
-              {user.displayName || user.email}
-            </button>
-          ) : (
-            <button className="new-tab-btn" onClick={handleLogin} title="Login with Google" style={{ width: 'auto', padding: '0 12px', fontSize: '12px', background: 'var(--accent-color)', color: '#000' }}>
-              <LogIn size={14} style={{ marginRight: '6px' }} />
-              Sign In to Sync
-            </button>
-          )}
-        </div>
       </div>
       
       <div className="editor-container" style={{ flexDirection: 'row' }}>
         
         {/* Mobile Sidebar Overlay */}
-        <div className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'open' : ''}`} onClick={() => setIsMobileSidebarOpen(false)}></div>
+        <div className={`sidebar-overlay ${isMobileSidebarOpen ? 'open' : ''}`} onClick={() => setIsMobileSidebarOpen(false)}></div>
         
-        {/* Sidebar (Mobile Only) */}
-        <div className={`mobile-sidebar ${isMobileSidebarOpen ? 'open' : ''}`}>
+        {/* Sidebar */}
+        <div className={`app-sidebar ${isMobileSidebarOpen ? 'open' : ''}`}>
           <div style={{ padding: '16px', fontSize: '12px', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
             ALL NOTES
           </div>
