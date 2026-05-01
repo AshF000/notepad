@@ -277,7 +277,7 @@ function App() {
             {notes.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No notes found.</div>}
           </div>
           
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+          <div style={{ padding: '16px', paddingBottom: 'max(16px, env(safe-area-inset-bottom))', borderTop: '1px solid var(--border-color)', flexShrink: 0, backgroundColor: 'var(--bg-color)' }}>
             {user ? (
               <button className="sidebar-auth-btn" onClick={handleLogout}>
                 <LogOut size={16} /> Logout ({user.displayName?.split(' ')[0] || 'User'})
