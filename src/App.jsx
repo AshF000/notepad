@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, X, FileText, LogIn, LogOut, Cloud } from 'lucide-react';
+import { Plus, X, FileText, LogIn, LogOut, Cloud, Menu } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from './db';
 import { auth, googleProvider, firestoreDb } from './firebase';
@@ -13,17 +13,15 @@ function App() {
   const [openTabs, setOpenTabs] = useState([]);
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Determine current user ID for database queries
   const currentUserId = user ? user.uid : 'local';
 
-  // Query local notes for the current user
   const notes = useLiveQuery(
     () => db.notes.where('userId').equals(currentUserId).toArray(),
     [currentUserId]
   ) || [];
 
-  // Listen to Auth State
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -31,7 +29,16 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Load app state
+  const saveAppState = async (newActiveTabId, newOpenTabs) => {
+    setActiveTabId(newActiveTabId);
+    setOpenTabs(newOpenTabs);
+    await db.appState.put({
+      id: 'main',
+      activeTabId: newActiveTabId,
+      openTabs: newOpenTabs
+    });
+  };
+
   useEffect(() => {
     const loadState = async () => {
       let state = await db.appState.get('main');
@@ -44,24 +51,30 @@ function App() {
     loadState();
   }, [currentUserId]);
 
-  // Firebase Real-time Sync (Only when logged in)
   useEffect(() => {
     if (!user) return;
 
-    // Listen to remote changes
     const q = query(collection(firestoreDb, 'notes'), where('userId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'added' || change.type === 'modified') {
           const data = change.doc.data();
           const localNote = await db.notes.get(change.doc.id);
-          // Simple conflict resolution: Last Write Wins
+          
           if (!localNote || localNote.lastModified < data.lastModified) {
             await db.notes.put({
               ...data,
               id: change.doc.id,
               syncStatus: 'synced'
             });
+
+            // Auto-open tab for newly synced notes (PC behavior)
+            if (!localNote) {
+              const state = await db.appState.get('main');
+              if (state && !state.openTabs.includes(change.doc.id)) {
+                await saveAppState(change.doc.id, [...state.openTabs, change.doc.id]);
+              }
+            }
           }
         }
         if (change.type === 'removed') {
@@ -75,7 +88,6 @@ function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // Background worker to push local pending changes to Firebase
   useEffect(() => {
     if (!user) return;
     
@@ -92,7 +104,7 @@ function App() {
             await setDoc(doc(firestoreDb, 'notes', note.id), {
               ...note,
               syncStatus: 'synced',
-              serverTime: serverTimestamp() // Optional: for true server ordering
+              serverTime: serverTimestamp()
             });
             await db.notes.update(note.id, { syncStatus: 'synced' });
           } catch (error) {
@@ -101,20 +113,10 @@ function App() {
         }
         setIsSyncing(false);
       }
-    }, 5000); // Check every 5 seconds
+    }, 5000);
 
     return () => clearInterval(syncInterval);
   }, [user]);
-
-  const saveAppState = async (newActiveTabId, newOpenTabs) => {
-    setActiveTabId(newActiveTabId);
-    setOpenTabs(newOpenTabs);
-    await db.appState.put({
-      id: 'main',
-      activeTabId: newActiveTabId,
-      openTabs: newOpenTabs
-    });
-  };
 
   const createNewTab = async () => {
     const newId = uuidv4();
@@ -128,6 +130,7 @@ function App() {
     });
     const newTabs = [...openTabs, newId];
     await saveAppState(newId, newTabs);
+    setIsMobileSidebarOpen(false); // Close sidebar on mobile when creating new
   };
 
   const closeTab = async (e, idToClose) => {
@@ -178,7 +181,21 @@ function App() {
 
   return (
     <>
-      <div className="titlebar">
+      {/* Mobile-only Header */}
+      <div className="mobile-header">
+        <button className="icon-btn" onClick={() => setIsMobileSidebarOpen(true)}>
+          <Menu size={20} />
+        </button>
+        <div className="mobile-title">
+          {activeNote ? activeNote.title : 'Notepad'}
+        </div>
+        <button className="icon-btn" onClick={createNewTab}>
+          <Plus size={20} />
+        </button>
+      </div>
+
+      {/* PC Titlebar (Hidden on Mobile) */}
+      <div className="titlebar desktop-only">
         {openTabs.map(tabId => {
           const note = notes.find(n => n.id === tabId);
           if (!note) return null;
@@ -204,7 +221,6 @@ function App() {
           <Plus size={18} />
         </button>
 
-        {/* Auth Section in Titlebar */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', marginRight: '8px', paddingBottom: '4px' }}>
           {user ? (
             <button className="new-tab-btn" onClick={handleLogout} title="Logout" style={{ width: 'auto', padding: '0 12px', fontSize: '12px' }}>
@@ -221,9 +237,13 @@ function App() {
       </div>
       
       <div className="editor-container" style={{ flexDirection: 'row' }}>
-        {/* Sidebar for all notes */}
-        <div style={{ width: '200px', borderRight: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+        
+        {/* Mobile Sidebar Overlay */}
+        <div className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? 'open' : ''}`} onClick={() => setIsMobileSidebarOpen(false)}></div>
+        
+        {/* Sidebar (Mobile Only) */}
+        <div className={`mobile-sidebar ${isMobileSidebarOpen ? 'open' : ''}`}>
+          <div style={{ padding: '16px', fontSize: '12px', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
             ALL NOTES
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
@@ -236,23 +256,37 @@ function App() {
                   } else {
                     saveAppState(note.id, openTabs);
                   }
+                  setIsMobileSidebarOpen(false);
                 }}
                 style={{
-                  padding: '8px',
-                  borderRadius: '4px',
+                  padding: '12px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   backgroundColor: activeTabId === note.id ? 'var(--tab-active-bg)' : 'transparent',
                   marginBottom: '4px',
-                  fontSize: '13px',
+                  fontSize: '14px',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}
               >
+                <FileText size={14} color="#60cdff" style={{ display: 'inline', marginRight: 8, verticalAlign: 'text-bottom' }} />
                 {note.title}
               </div>
             ))}
             {notes.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No notes found.</div>}
+          </div>
+          
+          <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+            {user ? (
+              <button className="sidebar-auth-btn" onClick={handleLogout}>
+                <LogOut size={16} /> Logout ({user.displayName?.split(' ')[0] || 'User'})
+              </button>
+            ) : (
+              <button className="sidebar-auth-btn active-auth" onClick={handleLogin}>
+                <LogIn size={16} /> Sign In to Sync
+              </button>
+            )}
           </div>
         </div>
 
@@ -268,17 +302,16 @@ function App() {
             />
           ) : (
             <div style={{ padding: 24, color: 'var(--text-muted)' }}>
-              No tabs open. Click + to create a new note or select one from the sidebar.
-              {!user && <p style={{ marginTop: 8 }}>Sign in to access your cloud-synced notes across all your devices.</p>}
+              {isMobileSidebarOpen ? '' : 'No tabs open. Open the menu to select a note or create a new one.'}
             </div>
           )}
         </div>
       </div>
 
-      <div className="statusbar">
+      <div className="statusbar desktop-only">
         {user && isSyncing && <Cloud size={14} style={{ marginRight: 6, animation: 'pulse 2s infinite' }} />}
         <span>
-          {!user ? 'Offline Mode (Local Only)' : (isSyncing ? 'Syncing to Cloud...' : 'All changes synced via Firebase')}
+          {!user ? 'Offline Mode (Local)' : (isSyncing ? 'Syncing...' : 'Synced via Firebase')}
         </span>
       </div>
     </>
